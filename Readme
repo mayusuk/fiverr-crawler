@@ -1,0 +1,11 @@
+HOW TO RUN?
+
+
+#Setup the python environment
+python3 -m venv /path/to/new/virtual/env
+
+#install the pip
+sudo apt-get install python-pip
+
+#install python dependencies
+pip install -r requirements.txt
