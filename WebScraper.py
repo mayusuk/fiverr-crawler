@@ -285,6 +285,9 @@ if __name__ == '__main__':
                    "is_featured|gig_created|gig_locale|max_qantity|seller_id|seller_country\n")
     gigs_data_frame = defaultdict(list)
     unique_gigs = defaultdict()
+
+    gigs_package_dataframe = OrderedDefaultDict()
+
     for key, values in gigs.items():
         for value in values:
             gigsFile.write("{0}|{1}|{2}|{3}|{4}|{5}|{6}|{7}|{8}|{9}|{10}|{11}|{12}|{13}\n".format(key, value["category_id"], value["gig_id"],
@@ -320,181 +323,196 @@ if __name__ == '__main__':
                 gigs_data_frame["price_highest"].append(value.get("price_highest", None))
                 gigs_data_frame["gig_url"].append(value.get("gig_url", None))
 
-    append_to_excel(excel_file, "gigs", gigs_data_frame)
-
-    gigsFile.close()
-
-    freelancerFile = open("freelancersList", "w")
-    freelancerFile.write("seller_id,seller_name\n")
-    for seller_id, seller_name in freelancers.items():
-        freelancerFile.write("{0},{1}\n".format(seller_id, seller_name))
-    freelancerFile.close()
-
-    reviews_as_buyer = defaultdict(list)
-    reviews_as_seller = defaultdict(list)
-
-    freelancerFile = open("freelancersList", "r")
-    freelancerFile.readline()
-    for freelancer in freelancerFile.readlines():
-        freelancerId = freelancer.split(",")[0]
-        # get_freelancers_details(url, freelancerId)
-        response = get_all_reviews(url, freelancerId, as_buyer=True)
-        if response:
-            reviews_as_buyer[freelancerId]= response
-        response = get_all_reviews(url, freelancerId, as_buyer=False)
-        if response:
-            reviews_as_seller[freelancerId] = response
-
-    reviews_as_buyer_dataframe = OrderedDefaultDict()
-    reviews_as_seller_dataframe = OrderedDefaultDict()
-
-    reviews_as_buyer_file = open("BuyerReviews", "w")
-    reviews_as_seller_file = open("SellerReviews", "w")
-    reviews_as_buyer_file.write("freelancerId|reviewer_username|rating|comment|created_at\n")
-    reviews_as_seller_file.write("freelancerId|reviewer_username|rating|comment|created_at\n")
-    for freelancerId,reviews in reviews_as_buyer.items():
-        for review in reviews:
-            reviews_as_buyer_file.write("{0}|{1}|{2}|{3}|{4}\n".format(freelancerId, review["username"],
-                                                                       review["value"],
-                                                                       review["comment"],
-                                                                       review["created_at"]))
-            reviews_as_buyer_dataframe["freelancerId"].append(freelancerId)
-            reviews_as_buyer_dataframe["reviewer_username"].append(review["username"])
-            reviews_as_buyer_dataframe["rating"].append(review["value"])
-            reviews_as_buyer_dataframe["comment"].append(review["comment"])
-            reviews_as_buyer_dataframe["created_at"].append(review["created_at"])
-
-    append_to_excel(excel_file, "reviews_as_buyer", reviews_as_buyer_dataframe)
-
-    for freelancerId, reviews in reviews_as_seller.items():
-        for review in reviews:
-            reviews_as_seller_file.write("{0}|{1}|{2}|{3}|{4}\n".format(freelancerId, review["username"],
-                                               review["value"],
-                                               review["comment"],
-                                               review["created_at"]))
-            reviews_as_seller_dataframe["freelancerId"].append(freelancerId)
-            reviews_as_seller_dataframe["reviewer_username"].append(review["username"])
-            reviews_as_seller_dataframe["rating"].append(review["value"])
-            reviews_as_seller_dataframe["comment"].append(review["comment"])
-            reviews_as_seller_dataframe["created_at"].append(review["created_at"])
-
-    append_to_excel(excel_file, "reviews_as_seller", reviews_as_seller_dataframe)
-
-    reviews_as_seller_file.close()
-    reviews_as_buyer_file.close()
-
-    freelancersDetails_dataframe = OrderedDefaultDict()
-    freelancerEdu_dataframe = OrderedDefaultDict()
-    freelancerCert_dataframe = OrderedDefaultDict()
-    freelancertests_dataframe = OrderedDefaultDict()
-
-    freelancersDetails = defaultdict()
-    freelancerFile = open("freelancersList", "r")
-    freelancerFile.readline()
-    for line in freelancerFile.readlines():
-        freelancerUserName = line.split(",")[1]
-        freelancerUserName = freelancerUserName.rstrip("\n")
-        freelancersDetails[freelancerUserName] = get_freelancers_details(url, freelancerUserName)
-    freelancersDetailsFile = open("freelancersDetails", "w")
-    freelancersDetailsFile.write("user_id|username|rating|ratings_count|"
-                                 "country|member_since|is_pro|is_seller|is_pro_experience|"
-                                 "is_ambassador|custom_orders_allowed|active_skills|languages\n")
-    for freelancerUserName, data in freelancersDetails.items():
-        user_data = data.get("user", None)
-        if user_data is None:
-            print("{0} has empty data".format(freelancerUserName))
-        if user_data:
-
-            skills = data.get("skills", None)
-            active_skills = ""
-            if skills:
-                for skill in skills["list"]:
-                    if skill["status"] == "active":
-                        active_skills += "," + skill["name"]
-            active_skills = active_skills.lstrip(",")
-
-            languges = data.get("proficient_languages", None)
-            proficient_languages = ""
-
-            if languges:
-                for languge in languges["list"]:
-                    proficient_languages += "," + languge["name"]
-            proficient_languages = proficient_languages.lstrip(",")
-
-            social_accounts = ""
-
-            if "social_accounts" in data:
-                accounts = data.get("social_accounts", None)
-                for account in accounts["list"]:
-                    social_accounts += "," + account["value"]
-            social_accounts.lstrip(",")
-
-            if data.get("testdata") is not None and data.get("testdata") :
-                for testdata in data["testdata"]:
-                    freelancertests_dataframe["userid"].append(user_data.get("id", None))
-                    freelancertests_dataframe["test_title"].append(testdata.get("title", None))
-                    freelancertests_dataframe["score"].append(testdata.get("score", None))
-                    freelancertests_dataframe["platform_name"].append(testdata.get("platform_name", None))
-                    freelancertests_dataframe["passed"].append(testdata.get("passed", None))
-                    freelancertests_dataframe["total_questions"].append(testdata.get("total_questions", None))
-                    freelancertests_dataframe["slug"].append(testdata.get("slug", None))
-                    freelancertests_dataframe["status"].append(testdata.get("status", None))
-
-            if "certifications" in data:
-                for cert in data["certifications"]["list"]:
-                    freelancerCert_dataframe["userid"].append(user_data.get("id", None))
-                    freelancerCert_dataframe["certification_name"].append(cert.get("certification_name",None))
-                    freelancerCert_dataframe["received_from"].append(cert.get("received_from",None))
-                    freelancerCert_dataframe["year"].append(cert.get("year",None))
+                if value.get("packages", None):
+                    packages = value.get("packages", None)
+                    for package in packages:
+                        gigs_package_dataframe["gig_id"].append(value.get("gig_id", None))
+                        gigs_package_dataframe["seller_id"].append(value.get("seller_id", None))
+                        gigs_package_dataframe["package_id"].append(package.get("package_id", None))
+                        gigs_package_dataframe["updated_at"].append(package.get("updated_at", None))
+                        gigs_package_dataframe["title"].append(package.get("title", None))
+                        gigs_package_dataframe["description"].append(package.get("description", None))
+                        gigs_package_dataframe["duration"].append(package.get("description", None))
+                        gigs_package_dataframe["duration_unit"].append(package.get("duration_unit", None))
+                        gigs_package_dataframe["price"].append(package.get("price", None))
+                        gigs_package_dataframe["content"].append(package.get("content", None))
 
 
-            education = []
-            if "educations" in data :
-                education = data["educations"]["list"]
-                for edu in education:
-                    freelancerEdu_dataframe["userid"].append(user_data.get("id", None))
-                    freelancerEdu_dataframe["degree"].append(edu.get("degree",None))
-                    freelancerEdu_dataframe["from_year"].append(edu.get("from_year",None))
-                    freelancerEdu_dataframe["to_year"].append(edu.get("to_year",None))
-                    freelancerEdu_dataframe["degree_title"].append(edu.get("degree_title",None))
-                    freelancerEdu_dataframe["school"].append(edu.get("school",None))
-                    freelancerEdu_dataframe["country"].append(edu.get("country",None))
-
-
-            freelancersDetailsFile.write("{0}|{1}|{2}|{3}|{4}|{5}|{6}|{7}|{8}|{9}|{10}|{11}|{12}\n".format(user_data["id"],
-                                                                                freelancerUserName,
-                                                                                user_data["rating"],
-                                                                                user_data["ratings_count"],
-                                                                                user_data["country"],
-                                                                                user_data["member_since"],
-                                                                                user_data["is_pro"],
-                                                                                user_data["is_seller"],
-                                                                                user_data["is_pro_experience"],
-                                                                                user_data["is_ambassador"],
-                                                                                user_data["custom_orders_allowed"],
-                                                                                active_skills,
-                                                                                proficient_languages))
-            freelancersDetails_dataframe["user_id"].append(user_data.get("id", None))
-            freelancersDetails_dataframe["username"].append(freelancerUserName)
-            freelancersDetails_dataframe["overview"].append(data.get('overview', None))
-            freelancersDetails_dataframe["rating"].append(user_data.get("rating", None))
-            freelancersDetails_dataframe["ratings_count"].append(user_data.get("ratings_count", None))
-            freelancersDetails_dataframe["country"].append(user_data.get("country", None))
-            freelancersDetails_dataframe["member_since"].append(user_data.get("member_since", None))
-            freelancersDetails_dataframe["is_pro"].append(user_data.get("is_pro", None))
-            freelancersDetails_dataframe["is_seller"].append(user_data.get("is_seller", None))
-            freelancersDetails_dataframe["is_pro_experience"].append(user_data.get("is_pro_experience", None))
-            freelancersDetails_dataframe["is_ambassador"].append(user_data.get("is_ambassador", None))
-            freelancersDetails_dataframe["custom_orders_allowed"].append( user_data.get("custom_orders_allowed", None))
-            freelancersDetails_dataframe["active_skills"].append(active_skills)
-            freelancersDetails_dataframe["languages"].append(proficient_languages)
-            freelancersDetails_dataframe["social_accounts"].append(social_accounts)
-
-    arg = {'header': False}
-    append_to_excel(excel_file, "freelancers", freelancersDetails_dataframe, **arg)
-    append_to_excel(excel_file, "freelancers_education", freelancerEdu_dataframe, **arg)
-    append_to_excel(excel_file, "freelancers_cert", freelancerCert_dataframe, **arg)
-    append_to_excel(excel_file, "freelancers_tests", freelancertests_dataframe, **arg)
+    # append_to_excel(excel_file, "gigs", gigs_data_frame)
+    #
+    # gigsFile.close()
+    #
+    # freelancerFile = open("freelancersList", "w")
+    # freelancerFile.write("seller_id,seller_name\n")
+    # for seller_id, seller_name in freelancers.items():
+    #     freelancerFile.write("{0},{1}\n".format(seller_id, seller_name))
+    # freelancerFile.close()
+    #
+    # reviews_as_buyer = defaultdict(list)
+    # reviews_as_seller = defaultdict(list)
+    #
+    # freelancerFile = open("freelancersList", "r")
+    # freelancerFile.readline()
+    # for freelancer in freelancerFile.readlines():
+    #     freelancerId = freelancer.split(",")[0]
+    #     # get_freelancers_details(url, freelancerId)
+    #     response = get_all_reviews(url, freelancerId, as_buyer=True)
+    #     if response:
+    #         reviews_as_buyer[freelancerId]= response
+    #     response = get_all_reviews(url, freelancerId, as_buyer=False)
+    #     if response:
+    #         reviews_as_seller[freelancerId] = response
+    #
+    # reviews_as_buyer_dataframe = OrderedDefaultDict()
+    # reviews_as_seller_dataframe = OrderedDefaultDict()
+    #
+    # reviews_as_buyer_file = open("BuyerReviews", "w")
+    # reviews_as_seller_file = open("SellerReviews", "w")
+    # reviews_as_buyer_file.write("freelancerId|reviewer_username|rating|comment|created_at\n")
+    # reviews_as_seller_file.write("freelancerId|reviewer_username|rating|comment|created_at\n")
+    # for freelancerId,reviews in reviews_as_buyer.items():
+    #     for review in reviews:
+    #         reviews_as_buyer_file.write("{0}|{1}|{2}|{3}|{4}\n".format(freelancerId, review["username"],
+    #                                                                    review["value"],
+    #                                                                    review["comment"],
+    #                                                                    review["created_at"]))
+    #         reviews_as_buyer_dataframe["freelancerId"].append(freelancerId)
+    #         reviews_as_buyer_dataframe["reviewer_username"].append(review["username"])
+    #         reviews_as_buyer_dataframe["rating"].append(review["value"])
+    #         reviews_as_buyer_dataframe["comment"].append(review["comment"])
+    #         reviews_as_buyer_dataframe["created_at"].append(review["created_at"])
+    #
+    # append_to_excel(excel_file, "reviews_as_buyer", reviews_as_buyer_dataframe)
+    #
+    # for freelancerId, reviews in reviews_as_seller.items():
+    #     for review in reviews:
+    #         reviews_as_seller_file.write("{0}|{1}|{2}|{3}|{4}\n".format(freelancerId, review["username"],
+    #                                            review["value"],
+    #                                            review["comment"],
+    #                                            review["created_at"]))
+    #         reviews_as_seller_dataframe["freelancerId"].append(freelancerId)
+    #         reviews_as_seller_dataframe["reviewer_username"].append(review["username"])
+    #         reviews_as_seller_dataframe["rating"].append(review["value"])
+    #         reviews_as_seller_dataframe["comment"].append(review["comment"])
+    #         reviews_as_seller_dataframe["created_at"].append(review["created_at"])
+    #
+    # append_to_excel(excel_file, "reviews_as_seller", reviews_as_seller_dataframe)
+    #
+    # reviews_as_seller_file.close()
+    # reviews_as_buyer_file.close()
+    #
+    # freelancersDetails_dataframe = OrderedDefaultDict()
+    # freelancerEdu_dataframe = OrderedDefaultDict()
+    # freelancerCert_dataframe = OrderedDefaultDict()
+    # freelancertests_dataframe = OrderedDefaultDict()
+    #
+    # freelancersDetails = defaultdict()
+    # freelancerFile = open("freelancersList", "r")
+    # freelancerFile.readline()
+    # for line in freelancerFile.readlines():
+    #     freelancerUserName = line.split(",")[1]
+    #     freelancerUserName = freelancerUserName.rstrip("\n")
+    #     freelancersDetails[freelancerUserName] = get_freelancers_details(url, freelancerUserName)
+    # freelancersDetailsFile = open("freelancersDetails", "w")
+    # freelancersDetailsFile.write("user_id|username|rating|ratings_count|"
+    #                              "country|member_since|is_pro|is_seller|is_pro_experience|"
+    #                              "is_ambassador|custom_orders_allowed|active_skills|languages\n")
+    # for freelancerUserName, data in freelancersDetails.items():
+    #     user_data = data.get("user", None)
+    #     if user_data is None:
+    #         print("{0} has empty data".format(freelancerUserName))
+    #     if user_data:
+    #
+    #         skills = data.get("skills", None)
+    #         active_skills = ""
+    #         if skills:
+    #             for skill in skills["list"]:
+    #                 if skill["status"] == "active":
+    #                     active_skills += "," + skill["name"]
+    #         active_skills = active_skills.lstrip(",")
+    #
+    #         languges = data.get("proficient_languages", None)
+    #         proficient_languages = ""
+    #
+    #         if languges:
+    #             for languge in languges["list"]:
+    #                 proficient_languages += "," + languge["name"]
+    #         proficient_languages = proficient_languages.lstrip(",")
+    #
+    #         social_accounts = ""
+    #
+    #         if "social_accounts" in data:
+    #             accounts = data.get("social_accounts", None)
+    #             for account in accounts["list"]:
+    #                 social_accounts += "," + account["value"]
+    #         social_accounts.lstrip(",")
+    #
+    #         if data.get("testdata") is not None and data.get("testdata") :
+    #             for testdata in data["testdata"]:
+    #                 freelancertests_dataframe["userid"].append(user_data.get("id", None))
+    #                 freelancertests_dataframe["test_title"].append(testdata.get("title", None))
+    #                 freelancertests_dataframe["score"].append(testdata.get("score", None))
+    #                 freelancertests_dataframe["platform_name"].append(testdata.get("platform_name", None))
+    #                 freelancertests_dataframe["passed"].append(testdata.get("passed", None))
+    #                 freelancertests_dataframe["total_questions"].append(testdata.get("total_questions", None))
+    #                 freelancertests_dataframe["slug"].append(testdata.get("slug", None))
+    #                 freelancertests_dataframe["status"].append(testdata.get("status", None))
+    #
+    #         if "certifications" in data:
+    #             for cert in data["certifications"]["list"]:
+    #                 freelancerCert_dataframe["userid"].append(user_data.get("id", None))
+    #                 freelancerCert_dataframe["certification_name"].append(cert.get("certification_name",None))
+    #                 freelancerCert_dataframe["received_from"].append(cert.get("received_from",None))
+    #                 freelancerCert_dataframe["year"].append(cert.get("year",None))
+    #
+    #
+    #         education = []
+    #         if "educations" in data :
+    #             education = data["educations"]["list"]
+    #             for edu in education:
+    #                 freelancerEdu_dataframe["userid"].append(user_data.get("id", None))
+    #                 freelancerEdu_dataframe["degree"].append(edu.get("degree",None))
+    #                 freelancerEdu_dataframe["from_year"].append(edu.get("from_year",None))
+    #                 freelancerEdu_dataframe["to_year"].append(edu.get("to_year",None))
+    #                 freelancerEdu_dataframe["degree_title"].append(edu.get("degree_title",None))
+    #                 freelancerEdu_dataframe["school"].append(edu.get("school",None))
+    #                 freelancerEdu_dataframe["country"].append(edu.get("country",None))
+    #
+    #
+    #         freelancersDetailsFile.write("{0}|{1}|{2}|{3}|{4}|{5}|{6}|{7}|{8}|{9}|{10}|{11}|{12}\n".format(user_data["id"],
+    #                                                                             freelancerUserName,
+    #                                                                             user_data["rating"],
+    #                                                                             user_data["ratings_count"],
+    #                                                                             user_data["country"],
+    #                                                                             user_data["member_since"],
+    #                                                                             user_data["is_pro"],
+    #                                                                             user_data["is_seller"],
+    #                                                                             user_data["is_pro_experience"],
+    #                                                                             user_data["is_ambassador"],
+    #                                                                             user_data["custom_orders_allowed"],
+    #                                                                             active_skills,
+    #                                                                             proficient_languages))
+    #         freelancersDetails_dataframe["user_id"].append(user_data.get("id", None))
+    #         freelancersDetails_dataframe["username"].append(freelancerUserName)
+    #         freelancersDetails_dataframe["overview"].append(data.get('overview', None))
+    #         freelancersDetails_dataframe["rating"].append(user_data.get("rating", None))
+    #         freelancersDetails_dataframe["ratings_count"].append(user_data.get("ratings_count", None))
+    #         freelancersDetails_dataframe["country"].append(user_data.get("country", None))
+    #         freelancersDetails_dataframe["member_since"].append(user_data.get("member_since", None))
+    #         freelancersDetails_dataframe["is_pro"].append(user_data.get("is_pro", None))
+    #         freelancersDetails_dataframe["is_seller"].append(user_data.get("is_seller", None))
+    #         freelancersDetails_dataframe["is_pro_experience"].append(user_data.get("is_pro_experience", None))
+    #         freelancersDetails_dataframe["is_ambassador"].append(user_data.get("is_ambassador", None))
+    #         freelancersDetails_dataframe["custom_orders_allowed"].append( user_data.get("custom_orders_allowed", None))
+    #         freelancersDetails_dataframe["active_skills"].append(active_skills)
+    #         freelancersDetails_dataframe["languages"].append(proficient_languages)
+    #         freelancersDetails_dataframe["social_accounts"].append(social_accounts)
+    #
+    # arg = {'header': False}
+    # append_to_excel(excel_file, "freelancers", freelancersDetails_dataframe, **arg)
+    # append_to_excel(excel_file, "freelancers_education", freelancerEdu_dataframe, **arg)
+    # append_to_excel(excel_file, "freelancers_cert", freelancerCert_dataframe, **arg)
+    # append_to_excel(excel_file, "freelancers_tests", freelancertests_dataframe, **arg)
 
 
     print("Total time taken {0}".format(time.time() - start))

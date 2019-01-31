@@ -31,7 +31,7 @@ def get_page(url):
         response = json.dumps({'r': data, 'v': vid, 'u': uid})
         response = base64.b64encode(response.encode('utf-8'))
 
-        cookies = {'_pxCaptcha': 'eyJyIjoiMDNBRjZqRHFWa0ZVUTJRR1dNaUhZLXN0alJ4SWVmaGd5LUs4bFQxTDhHNVFfeGdhMjRwRFRFQlpBNUdWNllkRlhZdU9KS0lBVU1QS1VVeGE5Rlc5R2Itb20wa3FMaHNDQWNCWUdWUnFJek4xV1dYcEMybFNCQ2NMTERJcE5MbUdGLWtDaGZLNFdROXBzRzJrOHNFSk11UTFpSkw5WHVHdms5ZWl1VTBwem4wOHdESzBXUTRpQWd6NUM5YVhzSktqR2xoQ1BqX2NSeFRrOFgzWXB6QlNRNEV2QmFRM3RnZF9PYTdyMzJjVVZhTl9FM0h5VXlDVi1keE0taHFxTDlJVlJKY2pWQmRJaFRMcWQ4ajRFUDNSVHA3N2RYQjRFUEZLanFCRTV4bW9lMHk5d0pra2phOHR4ZjAzem5VWWVVUndGYWYzMVNqTEFMTWh2OCIsInYiOiIiLCJ1IjoiIn0=; expires=Tue, 29 Jan 2019 05:15:34 GMT; path=/; domain=.fiverr.com'}
+        cookies = {'_pxCaptcha': 'eyJyIjoiMDNBRjZqRHFXWnpXTWVldVdQUXlWcGZhYVZPaTBna1NqSTl1UWN4U3BwYmM2NU9HVVhPSWRPSkV5UUUxT2IwZlY5ZlU5MHo2VVNmeTl4RzUwMkQxSHQwVW5ib1FFeVdoSFRITDM1VUZ6clRtMWk3dVpucENjbFc5ZGFmNldmd1EtUjVNUjdqdzJocDUtYXFObktyYUdTLVVUbktTRWtva2ZlOGp6V2dtMWw5X04zS1RUUFZLbDJUN1RDSkR1NUZreEt0T2RReU9rMk9rbHJJOGxqVG00dzhfejBZdzducUpoekVYTUtTQ01OOUFja092ZXVBM2dMUnk2djE3VldVNEJuNUszcXYwUUNQU195Tkx4aGZSOE9JYkU3V3BtQUE2a3U5Z21TS1czbTFidWdUMk5GRUhhaGtWRy14OHVwU3VxWW9UaHVwclJ0QVBTUSIsInYiOiIiLCJ1IjoiIn0=; expires=Tue, 29 Jan 2019 05:15:34 GMT; path=/; domain=.fiverr.com'}
         with closing(get(url, stream=True, headers=headers, cookies=cookies)) as resp:
             if is_good_response(resp):
                 return resp.content
@@ -86,11 +86,11 @@ def get_gigs_from_api(url, api, categoryId, subcategoryId, page, freelancers, gi
     return
 
 
-def get_all_reviews(url, freelancerId, as_buyer=True):
-    review_type = "as_buyer"
-    if not as_buyer:
-        review_type = "as_seller"
-    api = "{0}/ratings/index?user_id={1}&page_size={2}&{3}=true".format(url, freelancerId, 100000, review_type)
+def get_all_reviews(url, freelancerId, positive=True):
+    review_type = "positive"
+    if not positive:
+        review_type = "negative"
+    api = "{0}/ratings/index?gig_id={1}&page_size={2}&type={3}".format(url, freelancerId, 100000, review_type)
     print("Crawling {0}".format(api))
     reviews = get_page(api)
     if reviews:
@@ -298,9 +298,10 @@ def crawl_gigs_by_category(url, categoryName, excel_file):
 
 def crawl_reviews(url, excel_file, start=0, end=200):
 
-    i = start
-    reviews_as_buyer = defaultdict(list)
-    reviews_as_seller = defaultdict(list)
+    i = start = int(start)
+    end = int(end)
+    positive_reviews = defaultdict(list)
+    negative_reviews = defaultdict(list)
 
     header = False
     startrow = None
@@ -309,55 +310,70 @@ def crawl_reviews(url, excel_file, start=0, end=200):
         startrow = 0
     arg = {'header': header}
 
-    freelancerFile = open("freelancersList", "r")
-    freelancerFile.readline()
-    for freelancer in freelancerFile.readlines():
+    gigs = open("gigs", "r")
+    gigs.readline()
+    for gig in gigs.readlines():
 
         if i >= start and i <= end:
-            freelancerId = freelancer.split(",")[0]
+            gig_id = gig.split("|")[2]
 
-            response = get_all_reviews(url, freelancerId, as_buyer=True)
+            response = get_all_reviews(url, gig_id, positive=True)
             if response:
-                reviews_as_buyer[freelancerId]= response
-            response = get_all_reviews(url, freelancerId, as_buyer=False)
+                positive_reviews[gig_id]= response
+            response = get_all_reviews(url, gig_id, positive=False)
             if response:
-                reviews_as_seller[freelancerId] = response
-            i += 1
+                negative_reviews[gig_id] = response
+        i += 1
 
-    reviews_as_buyer_dataframe = OrderedDefaultDict()
-    reviews_as_seller_dataframe = OrderedDefaultDict()
+    positive_reviews_dataframe = OrderedDefaultDict()
+    negative_reviews_dataframe = OrderedDefaultDict()
 
     reviews_as_buyer_file = open("BuyerReviews", "w")
     reviews_as_seller_file = open("SellerReviews", "w")
-    reviews_as_buyer_file.write("freelancerId|reviewer_username|rating|comment|created_at\n")
-    reviews_as_seller_file.write("freelancerId|reviewer_username|rating|comment|created_at\n")
-    for freelancerId,reviews in reviews_as_buyer.items():
+    reviews_as_buyer_file.write("gig_id|reviewer_username|rating|comment|created_at\n")
+    reviews_as_seller_file.write("gig_id|reviewer_username|rating|comment|created_at\n")
+    for gig_id,reviews in positive_reviews.items():
         for review in reviews:
-            reviews_as_buyer_file.write("{0}|{1}|{2}|{3}|{4}\n".format(freelancerId, review["username"],
+            reviews_as_buyer_file.write("{0}|{1}|{2}|{3}|{4}\n".format(gig_id, review["username"],
                                                                        review["value"],
                                                                        review["comment"],
                                                                        review["created_at"]))
-            reviews_as_buyer_dataframe["freelancerId"].append(freelancerId)
-            reviews_as_buyer_dataframe["reviewer_username"].append(review["username"])
-            reviews_as_buyer_dataframe["rating"].append(review["value"])
-            reviews_as_buyer_dataframe["comment"].append(review["comment"])
-            reviews_as_buyer_dataframe["created_at"].append(review["created_at"])
+            positive_reviews_dataframe["gig_id"].append(gig_id)
+            positive_reviews_dataframe["reviewer_username"].append(review["username"])
+            positive_reviews_dataframe["rating"].append(review["value"])
+            positive_reviews_dataframe["comment"].append(review["comment"])
+            positive_reviews_dataframe["created_at"].append(review["created_at"])
+            positive_reviews_dataframe["work_sample"].append(review.get("created_at", None))
+            seller_response = review.get("seller_response", None)
+            if seller_response:
+                seller_response = seller_response.get("comment", None)
+            else:
+                seller_response = None
+            positive_reviews_dataframe["seller_response"].append(seller_response)
 
-    append_to_excel(excel_file, "reviews_as_buyer", reviews_as_buyer_dataframe, startrow=startrow, **arg)
+    append_to_excel(excel_file, "positive_reviews", positive_reviews_dataframe, startrow=startrow, **arg)
 
-    for freelancerId, reviews in reviews_as_seller.items():
+    for gig_id, reviews in negative_reviews.items():
         for review in reviews:
-            reviews_as_seller_file.write("{0}|{1}|{2}|{3}|{4}\n".format(freelancerId, review["username"],
+            reviews_as_seller_file.write("{0}|{1}|{2}|{3}|{4}\n".format(gig_id, review["username"],
                                                review["value"],
                                                review["comment"],
                                                review["created_at"]))
-            reviews_as_seller_dataframe["freelancerId"].append(freelancerId)
-            reviews_as_seller_dataframe["reviewer_username"].append(review["username"])
-            reviews_as_seller_dataframe["rating"].append(review["value"])
-            reviews_as_seller_dataframe["comment"].append(review["comment"])
-            reviews_as_seller_dataframe["created_at"].append(review["created_at"])
+            negative_reviews_dataframe["gig_id"].append(gig_id)
+            negative_reviews_dataframe["reviewer_username"].append(review["username"])
+            negative_reviews_dataframe["rating"].append(review["value"])
+            negative_reviews_dataframe["comment"].append(review["comment"])
+            negative_reviews_dataframe["created_at"].append(review["created_at"])
+            negative_reviews_dataframe["work_sample"].append(review.get("created_at", None))
+            seller_response = review.get("seller_response", None)
+            if seller_response:
+                seller_response = seller_response.get("comment", None)
+            else:
+                seller_response = None
+            negative_reviews_dataframe["seller_response"].append(seller_response)
 
-    append_to_excel(excel_file, "reviews_as_seller", reviews_as_seller_dataframe, startrow=startrow, **arg)
+
+    append_to_excel(excel_file, "negative reviews", negative_reviews_dataframe, startrow=startrow, **arg)
 
     reviews_as_seller_file.close()
     reviews_as_buyer_file.close()
@@ -501,7 +517,7 @@ if __name__ == '__main__':
     url = 'https://www.fiverr.com'
     excel_file = 'pandas_simple.xlsx'
 
-    crawl_gigs_by_category(url, "Programming   Tech", excel_file)
+    # crawl_gigs_by_category(url, "Programming   Tech", excel_file)
 
     if args.type == "reviews":
         crawl_reviews(url, excel_file, args.start, args.end)
