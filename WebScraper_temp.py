@@ -10,7 +10,7 @@ import pandas as pd
 from collections import OrderedDict, defaultdict
 from openpyxl import load_workbook
 import argparse
-
+import demjson
 
 class OrderedDefaultDict(OrderedDict):
     def __missing__(self, key):
@@ -20,7 +20,7 @@ class OrderedDefaultDict(OrderedDict):
 
 
 def get_page(url):
-    time.sleep(15)
+    time.sleep(3)
     try:
         headers = {
             'User-Agent': 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:64.0) Gecko/20100101 Firefox/64.0'
@@ -84,6 +84,35 @@ def get_gigs_from_api(url, api, categoryId, subcategoryId, page, freelancers, gi
             return
         get_gigs_from_api(url, api, categoryId, subcategoryId, page + 1, freelancers, gigs)
     return
+
+def get_gig_details(url, suburl):
+    apiUrl = "{0}{1}".format(url, suburl)
+    print("Crawling {0}".format(apiUrl))
+    response = get_page(apiUrl)
+    if response:
+
+        page = BeautifulSoup(response, 'html.parser')
+        script = page.find_all("script")
+        gigdata = None
+        for tag in script:
+            if "gigData = {" in tag.get_text():
+                content = tag.get_text()
+                content = content.replace("\n", "")
+                content = content.replace("\r", "")
+                expression = "gigData = \{(.*)\},"
+                matches = re.search(expression, content)
+                gigdata = matches.group()
+                gigdata = gigdata.lstrip()
+                gigdata = gigdata.replace("gigData = ", "")
+                gigdata = gigdata.rstrip(",")
+                gigdata = demjson.decode(gigdata)
+                break
+
+        main_desc = page.find("div", {"class": "gig-main-desc"})
+        if main_desc:
+            main_desc = main_desc.get_text()
+        return gigdata, main_desc
+
 
 
 def get_all_reviews(url, freelancerId, positive=True):
@@ -250,6 +279,8 @@ def crawl_gigs_by_category(url, categoryName, excel_file):
     gigsFile.write("subcategoryId|categoryId|gig_id|title|status|price|rating|rating_count|"
                    "is_featured|gig_created|gig_locale|max_qantity|seller_id|seller_country\n")
     gigs_data_frame = defaultdict(list)
+    gigs_package_frame = OrderedDefaultDict()
+
     unique_gigs = defaultdict()
     for key, values in gigs.items():
         for value in values:
@@ -258,12 +289,15 @@ def crawl_gigs_by_category(url, categoryName, excel_file):
                                                                 value["rating"], value["rating_count"], value["is_featured"],
                                                                 value["gig_created"], value["gig_locale"], value["max_quantity"],
                                                                 value["seller_id"], value["seller_country"]))
+            gig_url = discription = None
+            gigdata = {}
             if value["gig_id"] not in unique_gigs:
                 skill_list = ""
                 if value.get("skills", None) :
                     for skill in value.get("skills", None):
                         skill_list += "," + skill
                     skill_list = skill_list.lstrip(",")
+                gig_url = value.get("gig_url", None)
                 unique_gigs[value["gig_id"]] = True
                 gigs_data_frame["subcategoryId"].append(key)
                 gigs_data_frame["categoryId"].append(value.get("category_id", None))
@@ -274,6 +308,8 @@ def crawl_gigs_by_category(url, categoryName, excel_file):
                 gigs_data_frame["rating"].append(value.get("rating", None))
                 gigs_data_frame["rating_count"].append(value.get("rating_count", None))
                 gigs_data_frame["is_featured"].append(value.get("is_featured", None))
+                gigs_data_frame["fastest_delivery_time"].append(value.get("fastest_delivery_time", None))
+                gigs_data_frame["avg_delivery_time"].append(value.get("avg_delivery_time", None))
                 gigs_data_frame["gig_created"].append(value.get("gig_created", None))
                 gigs_data_frame["gig_locale"].append(value.get("gig_locale", None))
                 gigs_data_frame["max_qantity"].append(value.get("max_quantity", None))
@@ -286,7 +322,38 @@ def crawl_gigs_by_category(url, categoryName, excel_file):
                 gigs_data_frame["price_highest"].append(value.get("price_highest", None))
                 gigs_data_frame["gig_url"].append(value.get("gig_url", None))
 
+
+
+                if gig_url:
+                    gigdata, discription = get_gig_details(url, gig_url)
+                gigs_data_frame["ordersInQueue"].append(gigdata.get("ordersInQueue", None))
+                gigs_data_frame["tags"].append(gigdata.get("tags", None))
+                gigs_data_frame["pricingModel"].append(gigdata.get("pricingModel", None))
+                if gigdata.get("pricingModel", None) == 'Package' and value.get("packages", None):
+                    for package in value.get("packages", []):
+                        gigs_package_frame["gig_id"].append(value.get("gig_id", None))
+                        gigs_package_frame["title"].append(package.get("title", None))
+                        gigs_package_frame["description"].append(package.get("description", None))
+                        gigs_package_frame["duration"].append(package.get("duration", None))
+                        gigs_package_frame["duration_unit"].append(package.get("duration_unit", None))
+                        gigs_package_frame["price"].append(package.get("price", None))
+                        modifications = None
+                        extra_fast_price = None
+                        extra_fast_duration = None
+                        if package.get("content", None):
+                            for content in package.get("content", []):
+                                if content.get('buyable_type', None) == "modifications" and content.get("extra_data", None):
+                                    modifications = content.get("extra_data", None).get("included_modifications", None)
+                                if content.get('buyable_type', None) == "extra_fast":
+                                    extra_fast_price = content.get("price", None)
+                                    extra_fast_duration = content.get("duration", None)
+                        gigs_package_frame["modifications"].append(modifications)
+                        gigs_package_frame["extra_fast_price"].append(extra_fast_price)
+                        gigs_package_frame["extra_fast_duration"].append(extra_fast_duration)
+
+
     append_to_excel(excel_file, "gigs", gigs_data_frame)
+    append_to_excel(excel_file, "gigs_package", gigs_package_frame)
 
     gigsFile.close()
 
@@ -298,14 +365,15 @@ def crawl_gigs_by_category(url, categoryName, excel_file):
 
 def crawl_reviews(url, excel_file, start=0, end=200):
 
-    i = start = int(start)
+    i = 1
+    start = int(start)
     end = int(end)
     positive_reviews = defaultdict(list)
     negative_reviews = defaultdict(list)
 
     header = False
     startrow = None
-    if start == 0:
+    if start == 1:
         header = True
         startrow = 0
     arg = {'header': header}
@@ -316,7 +384,7 @@ def crawl_reviews(url, excel_file, start=0, end=200):
 
         if i >= start and i <= end:
             gig_id = gig.split("|")[2]
-
+            gig_id = gig_id.lstrip("'")
             response = get_all_reviews(url, gig_id, positive=True)
             if response:
                 positive_reviews[gig_id]= response
@@ -343,7 +411,7 @@ def crawl_reviews(url, excel_file, start=0, end=200):
             positive_reviews_dataframe["rating"].append(review["value"])
             positive_reviews_dataframe["comment"].append(review["comment"])
             positive_reviews_dataframe["created_at"].append(review["created_at"])
-            positive_reviews_dataframe["work_sample"].append(review.get("created_at", None))
+            positive_reviews_dataframe["work_sample"].append(review.get("work_sample", None))
             seller_response = review.get("seller_response", None)
             if seller_response:
                 seller_response = seller_response.get("comment", None)
@@ -364,7 +432,7 @@ def crawl_reviews(url, excel_file, start=0, end=200):
             negative_reviews_dataframe["rating"].append(review["value"])
             negative_reviews_dataframe["comment"].append(review["comment"])
             negative_reviews_dataframe["created_at"].append(review["created_at"])
-            negative_reviews_dataframe["work_sample"].append(review.get("created_at", None))
+            negative_reviews_dataframe["work_sample"].append(review.get("work_sample", None))
             seller_response = review.get("seller_response", None)
             if seller_response:
                 seller_response = seller_response.get("comment", None)
@@ -381,7 +449,9 @@ def crawl_reviews(url, excel_file, start=0, end=200):
 
 def crawl_freelancers_details(url, excel_file, start=0, end=200):
 
-    i = start
+    i = 1
+    start = int(start)
+    end = int(end)
     freelancersDetails_dataframe = OrderedDefaultDict()
     freelancerEdu_dataframe = OrderedDefaultDict()
     freelancerCert_dataframe = OrderedDefaultDict()
@@ -492,7 +562,7 @@ def crawl_freelancers_details(url, excel_file, start=0, end=200):
 
     header = False
     startrow= None
-    if start == 0:
+    if start == 1:
         header = True
         startrow = 0
     arg = {'header': header}
